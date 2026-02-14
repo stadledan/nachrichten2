@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Nachrichten für Opa</title>
+
+  <style>
+    :root {
+      --bg: #f2f2f7; --card: #ffffff; --text: #000000; --muted: #6e6e73;
+      --border: #d1d1d6; --accent: #007aff; --shadow: 0 4px 12px rgba(0,0,0,0.08);
+      --r: 16px; --big: 26px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #000000; --card: #1c1c1e; --text: #ffffff; --muted: #8e8e93; --border: #38383a; --accent: #0a84ff; }
+    }
+
+    body, html {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      font-family: -apple-system, system-ui, sans-serif;
+      background: var(--bg); color: var(--text); overflow: hidden;
+    }
+
+    .app {
+      display: flex; flex-direction: column; height: 100vh;
+      padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+      box-sizing: border-box; gap: 12px;
+    }
+
+    header {
+      background: var(--card); padding: 18px; border-radius: var(--r);
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+
+    .btn {
+      padding: 16px 22px; border-radius: 14px; border: none;
+      background: var(--accent); color: white;
+      font-size: 20px; font-weight: 800; cursor: pointer;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    }
+    .btn-gray { background: #e5e5ea; color: black; }
+    @media (prefers-color-scheme: dark) { .btn-gray { background: #3a3a3c; color: white; } }
+    .btn:active { opacity: 0.6; transform: scale(0.96); }
+
+    main {
+      display: grid; grid-template-columns: 300px 1fr; gap: 12px; flex: 1; min-height: 0;
+    }
+
+    .column {
+      background: var(--card); border-radius: var(--r); border: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow);
+    }
+
+    .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; }
+
+    /* Zeitungen Links */
+    .source-btn {
+      width: 100%; text-align: left; padding: 24px 20px;
+      border: none; border-bottom: 1px solid var(--border);
+      background: transparent; color: var(--text);
+    }
+    .source-btn.active { background: var(--accent); color: white; }
+    .source-btn b { font-size: 24px; display: block; }
+    .source-btn span { font-size: 16px; opacity: 0.8; }
+
+    /* Nachrichten Rechts */
+    .news-item { border-bottom: 1px solid var(--border); }
+    .news-btn {
+      width: 100%; text-align: left; padding: 22px;
+      background: transparent; border: none; color: var(--text);
+      font-size: var(--big); font-weight: 700; line-height: 1.3;
+    }
+
+    /* Artikel Layer */
+    #reader {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--card); z-index: 100; display: none; flex-direction: column;
+      animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    .reader-content { padding: 30px 20px; max-width: 800px; margin: 0 auto; }
+    .reader-content h1 { font-size: 34px; line-height: 1.2; }
+    .reader-content p { font-size: 24px; line-height: 1.6; margin-bottom: 24px; }
+    .hero-img { width: 100%; border-radius: 16px; margin-bottom: 20px; display: none; }
+
+    .loader { padding: 50px; text-align: center; font-size: 22px; font-weight: bold; }
+    .spinner {
+      width: 50px; height: 50px; border: 5px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div style="line-height: 1">
+      <b style="font-size: 28px;">Nachrichten</b><br>
+      <small style="color: var(--muted)">Für Opa</small>
+    </div>
+    <div class="controls">
+      <button class="btn btn-gray" onclick="changeSize(-2)">A−</button>
+      <button class="btn btn-gray" onclick="changeSize(2)">A+</button>
+      <button class="btn" onclick="location.reload()">Aktualisieren</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="column">
+      <div class="scroll" id="sourceList"></div>
+    </div>
+    <div class="column">
+      <div class="scroll" id="newsList">
+        <div class="loader">Wähle links eine Zeitung aus, Opa! 📰</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="reader" class="reader-overlay">
+  <header style="border-radius: 0; border:none; border-bottom:1px solid var(--border)">
+    <button class="btn" onclick="closeReader()">← Zurück zur Liste</button>
+    <b id="readerSite" style="font-size: 22px;">Artikel</b>
+    <div style="width: 40px;"></div>
+  </header>
+  <div class="scroll">
+    <div class="reader-content" id="readerBody"></div>
+  </div>
+</div>
+
+<script>
+  const PROXY = (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`;
+
+  const SOURCES = [
+    { name: "ORF", desc: "Österreich heute", url: "https://rss.orf.at/news.xml" },
+    { name: "Tagesschau", desc: "Deutschland & Welt", url: "https://www.tagesschau.de/xml/rss2/" },
+    { name: "ZDF heute", desc: "Aktuelle Nachrichten", url: "https://www.zdf.de/rss/zdf/nachrichten" },
+    { name: "Kurier", desc: "Zeitung aus Wien", url: "https://kurier.at/rss" },
+    { name: "Der Standard", desc: "Nachrichten", url: "https://www.derstandard.at/rss" }
+  ];
+
+  let currentFontSize = 26;
+
+  function renderSources() {
+    document.getElementById('sourceList').innerHTML = SOURCES.map((s, i) => `
+      <button class="source-btn" onclick="loadNews(${i}, this)">
+        <b>${s.name}</b>
+        <span>${s.desc}</span>
+      </button>
+    `).join('');
+  }
+
+  async function loadNews(idx, btn) {
+    document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const list = document.getElementById('newsList');
+    list.innerHTML = '<div class="loader"><div class="spinner"></div>Lade die neuesten Meldungen...</div>';
+
+    try {
+      const res = await fetch(PROXY(SOURCES[idx].url));
+      const text = await res.text();
+      const xml = new DOMParser().parseFromString(text, "text/xml");
+      const items = Array.from(xml.querySelectorAll("item")).slice(0, 40);
+
+      list.innerHTML = items.map(it => {
+        const title = it.querySelector("title")?.textContent || "Nachricht";
+        const link = it.querySelector("link")?.textContent || "";
+        return `<div class="news-item"><button class="news-btn" onclick="openArticle('${link}','${SOURCES[idx].name}')">${title}</button></div>`;
+      }).join('');
+      list.scrollTop = 0;
+    } catch (e) {
+      list.innerHTML = '<div class="loader">Hoppla! Internet-Fehler. Bitte nochmal drücken.</div>';
+    }
+  }
+
+  async function openArticle(url, site) {
+    const r = document.getElementById('reader');
+    const b = document.getElementById('readerBody');
+    document.getElementById('readerSite').textContent = site;
+    b.innerHTML = '<div class="loader"><div class="spinner"></div>Lade den Text für dich...</div>';
+    r.style.display = 'flex';
+
+    try {
+      const res = await fetch(PROXY(url));
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const img = doc.querySelector("meta[property='og:image']")?.content;
+      const title = doc.querySelector("h1")?.textContent || doc.title;
+      const paras = Array.from(doc.querySelectorAll("p"))
+        .map(p => p.textContent.trim())
+        .filter(t => t.length > 60).slice(0, 20);
+
+      b.innerHTML = `
+        ${img ? `<img src="${img}" class="hero-img" style="display:block">` : ''}
+        <h1>${title}</h1>
+        <hr style="opacity:0.2; margin:20px 0">
+        ${paras.map(p => `<p>${p}</p>`).join('')}
+        <div style="text-align:center; padding:40px;">
+          <button class="btn btn-gray" onclick="window.open('${url}')">Ganze Webseite öffnen</button>
+        </div>
+      `;
+    } catch (e) {
+      b.innerHTML = '<div class="loader">Text konnte nicht geladen werden.</div>';
+    }
+  }
+
+  function closeReader() { document.getElementById('reader').style.display = 'none'; }
+  
+  function changeSize(n) {
+    currentFontSize = Math.max(18, Math.min(45, currentFontSize + n));
+    document.documentElement.style.setProperty('--big', currentFontSize + 'px');
+  }
+
+  renderSources();
+</script>
+</body>
+</html>
